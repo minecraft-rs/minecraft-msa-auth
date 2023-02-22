@@ -6,6 +6,7 @@ edition = "2021"
 [dependencies]
 getset = "0.1.2"
 nutype = "0.1.1"
+oauth2 = { version = "4.3.0", default-features = false }
 reqwest = { version = "0.11.14", default-features = false, features = ["json"] }
 serde = { version = "1.0.152", features = ["derive"] }
 serde_json = "1.0.93"
@@ -13,5 +14,6 @@ thiserror = "1.0.38"
 tokio = { version = "1.25.0", features = ["time"] }
 
 [dev-dependencies]
+oauth2 = { version = "4.3.0", default-features = false, features = ["reqwest", "rustls-tls"] }
 reqwest = { version = "0.11.14", default-features = false, features = ["rustls-tls", "json"] }
 tokio = { version = "1.25.0", features = ["full"] }
