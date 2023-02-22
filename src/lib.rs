@@ -52,6 +52,7 @@ const MINECRAFT_LOGIN_WITH_XBOX: &str = "https://api.minecraftservices.com/authe
 const XBOX_USER_AUTHERNITATE: &str = "https://user.auth.xboxlive.com/user/authenticate";
 const XBOX_XSTS_AUTHORIZE: &str = "https://xsts.auth.xboxlive.com/xsts/authorize";
 
+/// Represents an error that can occur when authenticating with Minecraft.
 #[derive(Error, Debug)]
 pub enum MinecraftAuthorizationError {
     #[error("Http error: {0}")]
