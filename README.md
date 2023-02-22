@@ -1,5 +1,9 @@
 # `minecraft-msa-auth`
 
+[![Crates.io](https://img.shields.io/crates/v/minecraft-msa-auth.svg)](https://crates.io/crates/minecraft-msa-auth)
+[![MIT/Apache 2.0](https://img.shields.io/badge/license-MIT%2FApache-blue.svg)](https://github.com/KernelFreeze/minecraft-msa-auth#license)
+[![Crates.io](https://img.shields.io/crates/d/minecraft-msa-auth.svg)](https://crates.io/crates/minecraft-msa-auth)
+
 This crate allows you to authenticate into Minecraft online services using a Microsoft Oauth2 token. You can integrate it with [oauth2-rs](https://github.com/ramosbugs/oauth2-rs) and build interactive authentication flows.
 
 # Example
