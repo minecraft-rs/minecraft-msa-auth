@@ -4,6 +4,10 @@ version = "0.1.0"
 edition = "2021"
 authors = ["Celeste Peláez <celeste@eufonia.studio>"]
 description = "A library for authenticating with Microsoft accounts to access Minecraft services."
+repository = "https://github.com/KernelFreeze/minecraft-msa-auth"
+categories = ["authentication"]
+rust-version = "1.67.1"
+license = "MIT OR Apache-2.0"
 
 [dependencies]
 getset = "0.1.2"
