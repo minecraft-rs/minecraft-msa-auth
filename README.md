@@ -1,6 +1,7 @@
 # `minecraft-msa-auth`
 
 [![Crates.io](https://img.shields.io/crates/v/minecraft-msa-auth.svg)](https://crates.io/crates/minecraft-msa-auth)
+[![docs.rs](https://img.shields.io/docsrs/minecraft-msa-auth)](https://docs.rs/minecraft-msa-auth)
 [![MIT/Apache 2.0](https://img.shields.io/badge/license-MIT%2FApache-blue.svg)](https://github.com/KernelFreeze/minecraft-msa-auth#license)
 [![Crates.io](https://img.shields.io/crates/d/minecraft-msa-auth.svg)](https://crates.io/crates/minecraft-msa-auth)
 [![Rust](https://github.com/KernelFreeze/minecraft-msa-auth/actions/workflows/rust.yml/badge.svg?branch=main)](https://github.com/KernelFreeze/minecraft-msa-auth/actions/workflows/rust.yml)
