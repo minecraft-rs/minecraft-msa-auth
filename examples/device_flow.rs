@@ -2,7 +2,7 @@ use minecraft_microsoft_auth::MinecraftAuthorizationFlow;
 use oauth2::basic::BasicClient;
 use oauth2::devicecode::StandardDeviceAuthorizationResponse;
 use oauth2::reqwest::async_http_client;
-use oauth2::{AuthUrl, ClientId, DeviceAuthorizationUrl, Scope, TokenUrl};
+use oauth2::{AuthUrl, ClientId, DeviceAuthorizationUrl, Scope, TokenUrl, TokenResponse};
 use reqwest::Client;
 
 #[tokio::main]
@@ -26,7 +26,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .request_async(async_http_client)
         .await?;
 
-    eprintln!(
+    println!(
         "Open this URL in your browser:\n{}\nand enter the code: {}",
         details.verification_uri().to_string(),
         details.user_code().secret().to_string()
@@ -39,7 +39,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("microsoft token: {:?}", token);
 
     let mc_flow = MinecraftAuthorizationFlow::new(Client::new());
-    let mc_token = mc_flow.exchange_microsoft_token(&token).await?;
+    let mc_token = mc_flow.exchange_microsoft_token(token.access_token()).await?;
     println!("minecraft token: {:?}", mc_token);
     Ok(())
 }
