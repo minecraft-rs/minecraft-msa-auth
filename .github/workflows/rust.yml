@@ -6,15 +6,38 @@ on:
   pull_request:
     branches: [ "main" ]
 
-env:
-  CARGO_TERM_COLOR: always
-
 jobs:
-  build:
-
-    runs-on: ubuntu-latest
-
+  format:
+    name: Validate formatting
+    runs-on: ubuntu-22.04
     steps:
-    - uses: actions/checkout@v3
-    - name: Run clippy
-      run: cargo --all-features -- -A unused_variables -A dead_code -A clippy::type_complexity -A clippy::missing_safety_doc
+      - uses: actions/checkout@v2
+      - uses: FrancisRussell/ferrous-actions@v0.1.0-beta.2
+        name: Cargo fmt
+        with:
+          command: cargo fmt
+          toolchain: nightly
+          args: --all -- --check
+          annotations: true
+      - uses: FrancisRussell/ferrous-actions@v0.1.0-beta.2
+        name: Install Cargo Sort
+        with:
+          command: cargo install cargo-sort
+          toolchain: nightly
+          annotations: true
+      - name: Check that `Cargo.toml` is sorted
+        run: cargo sort -wgc
+  clippy:
+    name: Lint with Clippy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v1
+      - name: Install dependencies
+        run: sudo apt-get update && sudo apt-get install g++ pkg-config libx11-dev libasound2-dev libudev-dev clang mold
+      - uses: FrancisRussell/ferrous-actions@v0.1.0-beta.2
+        name: Cargo clippy
+        with:
+          command: cargo clippy
+          toolchain: nightly
+          args: --workspace --all-features -- -A unused_variables -A dead_code -A clippy::type_complexity -A clippy::missing_safety_doc
+          annotations: true
