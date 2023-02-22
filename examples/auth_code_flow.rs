@@ -1,4 +1,4 @@
-use minecraft_microsoft_auth::MinecraftAuthorizationFlow;
+use minecraft_msa_auth::MinecraftAuthorizationFlow;
 use oauth2::basic::BasicClient;
 use oauth2::reqwest::async_http_client;
 use oauth2::{
