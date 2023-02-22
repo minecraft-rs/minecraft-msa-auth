@@ -107,7 +107,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("microsoft token:\n{:?}\n", token);
 
         let mc_flow = MinecraftAuthorizationFlow::new(Client::new());
-        let mc_token = mc_flow.exchange_microsoft_token(token.access_token()).await?;
+        let mc_token = mc_flow.exchange_microsoft_token(token.access_token().secret()).await?;
         println!("minecraft token: {:?}", mc_token);
 
         // The server will terminate itself after collecting the first code.
