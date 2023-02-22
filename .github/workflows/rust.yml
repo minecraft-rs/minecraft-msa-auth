@@ -29,7 +29,8 @@ jobs:
       - uses: FrancisRussell/ferrous-actions@v0.1.0-beta.2
         name: Install Cargo Sort
         with:
-          command: cargo install cargo-sort
+          command: cargo install
+          args: cargo-sort
           toolchain: nightly
           annotations: true
       - name: Check that `Cargo.toml` is sorted
