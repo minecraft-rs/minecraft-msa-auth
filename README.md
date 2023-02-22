@@ -13,7 +13,7 @@ let client = BasicClient::new(
     ClientId::new(client_id),
     None,
     AuthUrl::new(MSA_AUTHORIZE_URL.to_string())?,
-    Some(TokenUrl::new( MSA_TOKEN_URL.to_string())?),
+    Some(TokenUrl::new(MSA_TOKEN_URL.to_string())?),
 )
 .set_device_authorization_url(DeviceAuthorizationUrl::new(DEVICE_CODE_URL.to_string())?);
 
@@ -24,7 +24,7 @@ let details: StandardDeviceAuthorizationResponse = client
     .await?;
 
 println!(
-    "Open this URL in your browser:\n{}\nand enter the code: {}",
+    "Open this URL in your browser: {} and enter the code: {}",
     details.verification_uri().to_string(),
     details.user_code().secret().to_string()
 );
