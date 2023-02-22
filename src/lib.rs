@@ -46,7 +46,7 @@
 //! println!("microsoft token: {:?}", token);
 //!
 //! let mc_flow = MinecraftAuthorizationFlow::new(Client::new());
-//! let mc_token = mc_flow.exchange_microsoft_token(token.access_token()).await?;
+//! let mc_token = mc_flow.exchange_microsoft_token(token.access_token().secret()).await?;
 //! println!("minecraft token: {:?}", mc_token);
 //! # Ok(())
 //! # }
@@ -54,7 +54,6 @@
 use std::collections::HashMap;
 
 use getset::{CopyGetters, Getters};
-use oauth2::AccessToken;
 use reqwest::{Client as HttpClient, Response, StatusCode};
 use serde::Deserialize;
 use serde_json::json;
@@ -123,13 +122,13 @@ impl MinecraftAuthorizationFlow {
     /// Microsoft access token and returns a [MinecraftAuthenticationResponse]
     /// that contains the Minecraft access token.
     pub async fn exchange_microsoft_token(
-        &self, microsoft_access_token: &AccessToken,
+        &self, microsoft_access_token: impl AsRef<str>,
     ) -> Result<MinecraftAuthenticationResponse, MinecraftAuthorizationError> {
         let xbox_authenticate_json = json!({
             "Properties": {
                 "AuthMethod": "RPS",
                 "SiteName": "user.auth.xboxlive.com",
-                "RpsTicket": &format!("d={}", microsoft_access_token.secret())
+                "RpsTicket": &format!("d={}", microsoft_access_token.as_ref())
             },
             "RelyingParty": "http://auth.xboxlive.com",
             "TokenType": "JWT"
