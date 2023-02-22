@@ -2,6 +2,8 @@
 name = "minecraft-msa-auth"
 version = "0.1.0"
 edition = "2021"
+authors = ["Celeste Peláez <celeste@eufonia.studio>"]
+description = "A library for authenticating with Microsoft accounts to access Minecraft services."
 
 [dependencies]
 getset = "0.1.2"
@@ -10,7 +12,6 @@ reqwest = { version = "0.11.14", default-features = false, features = ["json"] }
 serde = { version = "1.0.152", features = ["derive"] }
 serde_json = "1.0.93"
 thiserror = "1.0.38"
-tokio = { version = "1.25.0", features = ["time"] }
 
 [dev-dependencies]
 oauth2 = { version = "4.3.0", default-features = false, features = ["reqwest", "rustls-tls"] }
