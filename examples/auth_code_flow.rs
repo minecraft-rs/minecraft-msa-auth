@@ -40,7 +40,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .add_scope(Scope::new("XboxLive.signin offline_access".to_string()))
         .set_pkce_challenge(pkce_code_challenge)
         .url();
-
     println!("Open this URL in your browser:\n{}\n", authorize_url.to_string());
 
     // A very naive implementation of the redirect server.
@@ -59,26 +58,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let redirect_url = request_line.split_whitespace().nth(1).unwrap();
             let url = Url::parse(&("http://localhost".to_string() + redirect_url))?;
 
-            let code_pair = url
-                .query_pairs()
-                .find(|pair| {
-                    let &(ref key, _) = pair;
-                    key == "code"
-                })
-                .unwrap();
-
-            let (_, value) = code_pair;
+            let (_key, value) = url.query_pairs().find(|(key, _value)| key == "code").unwrap();
             code = AuthorizationCode::new(value.into_owned());
 
-            let state_pair = url
-                .query_pairs()
-                .find(|pair| {
-                    let &(ref key, _) = pair;
-                    key == "state"
-                })
-                .unwrap();
-
-            let (_, value) = state_pair;
+            let (_key, value) = url.query_pairs().find(|(key, _value)| key == "state").unwrap();
             state = CsrfToken::new(value.into_owned());
         }
 
@@ -103,9 +86,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             // Send the PKCE code verifier in the token request
             .set_pkce_verifier(pkce_code_verifier)
             .request_async(async_http_client).await?;
-
         println!("microsoft token:\n{:?}\n", token);
 
+        // Exchange the Microsoft token with a Minecraft token.
         let mc_flow = MinecraftAuthorizationFlow::new(Client::new());
         let mc_token = mc_flow.exchange_microsoft_token(token.access_token().secret()).await?;
         println!("minecraft token: {:?}", mc_token);

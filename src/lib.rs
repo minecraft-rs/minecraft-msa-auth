@@ -52,8 +52,10 @@
 //! # }
 //! ```
 use std::collections::HashMap;
+use std::fmt::Debug;
 
 use getset::{CopyGetters, Getters};
+use nutype::nutype;
 use reqwest::{Client as HttpClient, Response, StatusCode};
 use serde::Deserialize;
 use serde_json::json;
@@ -62,6 +64,24 @@ use thiserror::Error;
 const MINECRAFT_LOGIN_WITH_XBOX: &str = "https://api.minecraftservices.com/authentication/login_with_xbox";
 const XBOX_USER_AUTHERNITATE: &str = "https://user.auth.xboxlive.com/user/authenticate";
 const XBOX_XSTS_AUTHORIZE: &str = "https://xsts.auth.xboxlive.com/xsts/authorize";
+
+/// Represents a Minecraft access token
+#[nutype(validate(present))]
+#[derive(Clone, PartialEq, Eq, Hash, Deserialize, AsRef, Into)]
+pub struct MinecraftAccessToken(String);
+
+impl Debug for MinecraftAccessToken {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_tuple("MinecraftAccessToken").field(&"[redacted]").finish()
+    }
+}
+
+/// Represents the token type of a Minecraft access token
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub enum MinecraftTokenType {
+    Bearer,
+}
 
 /// Represents an error that can occur when authenticating with Minecraft.
 #[derive(Error, Debug)]
@@ -83,7 +103,7 @@ pub struct MinecraftAuthenticationResponse {
 
     /// The minecraft JWT access token
     #[getset(get = "pub")]
-    access_token: String,
+    access_token: MinecraftAccessToken,
 
     /// The type of access token
     #[getset(get = "pub")]

@@ -1,6 +1,6 @@
 [package]
 name = "minecraft-msa-auth"
-version = "0.1.1"
+version = "0.2"
 edition = "2021"
 authors = ["Celeste Peláez <celeste@eufonia.studio>"]
 description = "A library for authenticating with Microsoft accounts to access Minecraft services."
@@ -11,6 +11,7 @@ license = "MIT OR Apache-2.0"
 
 [dependencies]
 getset = "0.1.2"
+nutype = { version = "0.1.1", features = ["serde1"] }
 reqwest = { version = "0.11.14", default-features = false, features = ["json"] }
 serde = { version = "1.0.152", features = ["derive"] }
 serde_json = "1.0.93"
