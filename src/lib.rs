@@ -57,7 +57,7 @@ use std::fmt::Debug;
 use getset::{CopyGetters, Getters};
 use nutype::nutype;
 use reqwest::{Client as HttpClient, Response, StatusCode};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::json;
 use thiserror::Error;
 
@@ -67,7 +67,7 @@ const XBOX_XSTS_AUTHORIZE: &str = "https://xsts.auth.xboxlive.com/xsts/authorize
 
 /// Represents a Minecraft access token
 #[nutype(validate(present))]
-#[derive(Clone, PartialEq, Eq, Hash, Deserialize, AsRef, Into)]
+#[derive(Clone, PartialEq, Eq, Hash, Deserialize, Serialize, AsRef, Into)]
 pub struct MinecraftAccessToken(String);
 
 impl Debug for MinecraftAccessToken {
@@ -77,7 +77,7 @@ impl Debug for MinecraftAccessToken {
 }
 
 /// Represents the token type of a Minecraft access token
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Deserialize, Serialize)]
 #[serde(rename_all = "PascalCase")]
 pub enum MinecraftTokenType {
     Bearer,
@@ -95,7 +95,7 @@ pub enum MinecraftAuthorizationError {
 
 /// The response from Minecraft when attempting to authenticate with an xbox
 /// token
-#[derive(Deserialize, Debug, Getters, CopyGetters, Clone)]
+#[derive(Deserialize, Serialize, Debug, Getters, CopyGetters, Clone)]
 pub struct MinecraftAuthenticationResponse {
     /// Some UUID of the account
     #[getset(get = "pub")]
@@ -107,7 +107,7 @@ pub struct MinecraftAuthenticationResponse {
 
     /// The type of access token
     #[getset(get = "pub")]
-    token_type: String,
+    token_type: MinecraftTokenType,
 
     /// How many seconds until the token expires
     #[getset(get_copy = "pub")]
