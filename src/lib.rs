@@ -97,7 +97,7 @@ pub enum MinecraftAuthorizationError {
 /// token
 #[derive(Deserialize, Serialize, Debug, Getters, CopyGetters, Clone)]
 pub struct MinecraftAuthenticationResponse {
-    /// Some UUID of the account
+    /// Some UUID of the account. Not the player's UUID
     #[getset(get = "pub")]
     username: String,
 
