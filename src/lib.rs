@@ -57,6 +57,7 @@ use std::fmt::Debug;
 use getset::{CopyGetters, Getters};
 use nutype::nutype;
 use reqwest::{Client as HttpClient, Response, StatusCode};
+use reqwest::header::AUTHORIZATION;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use thiserror::Error;
@@ -113,6 +114,49 @@ pub struct MinecraftAuthenticationResponse {
     #[getset(get_copy = "pub")]
     expires_in: u32,
 }
+
+///The response from minecraft when getting information about a profile
+#[derive(Deserialize, Serialize, Debug, Getters, CopyGetters, Clone)]
+pub struct MinecraftProfileResponse {
+    ///The main UUID of the minecraft account
+    #[getset(get = "pub")]
+    id: String,
+
+    ///The name of the minecraft account
+    #[getset(get = "pub")]
+    name: String,
+
+    ///The skins of the minecraft account
+    #[getset(get = "pub")]
+    skins: Vec<Skin>,
+
+    ///The capes of the minecraft account
+    capes: Vec<Option<serde_json::Value>>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Getters, CopyGetters, Clone)]
+pub struct Skin {
+    ///The skin unique id. Not equal to the player's uuid
+    #[getset(get = "pub")]
+    id: String,
+
+    ///Whether the skin is on the player or not
+    #[getset(get = "pub")]
+    state: String,
+
+    ///The url where the skin texture can be found
+    #[getset(get = "pub")]
+    url: String,
+
+    ///The type of skin either SLIM or CLASSIC
+    #[getset(get = "pub")]
+    variant: String,
+
+    ///The skin alias
+    #[getset(get = "pub")]
+    alias: String,
+}
+
 
 /// The response from Xbox when authenticating with a Microsoft token
 #[derive(Deserialize, Debug)]
@@ -199,6 +243,23 @@ impl MinecraftAuthorizationFlow {
         let response = error_for_status(response).await?;
         let minecraft_resp: MinecraftAuthenticationResponse = response.json().await?;
         Ok(minecraft_resp)
+    }
+
+    ///Gets profile data and returns the [MinecraftProfileResponse] if the account owns minecraft
+    ///This may error if the account does not own minecraft or has not setup their account
+    /// with xbox gold
+    pub async fn get_profile_data(&self, token: &MinecraftAccessToken)
+                                  -> Result<MinecraftProfileResponse, MinecraftAuthorizationError> {
+        let response = self
+            .http_client
+            .get("https://api.minecraftservices.com/minecraft/profile")
+            .header(AUTHORIZATION, format!("Bearer {:?}", token))
+            .send()
+            .await?;
+
+        let response = error_for_status(response).await?;
+        let profile_resp: MinecraftProfileResponse = response.json().await?;
+        Ok(profile_resp)
     }
 }
 
