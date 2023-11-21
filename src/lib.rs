@@ -66,8 +66,10 @@ const XBOX_USER_AUTHENTICATE: &str = "https://user.auth.xboxlive.com/user/authen
 const XBOX_XSTS_AUTHORIZE: &str = "https://xsts.auth.xboxlive.com/xsts/authorize";
 
 /// Represents a Minecraft access token
-#[nutype(validate(not_empty))]
-#[derive(Clone, PartialEq, Eq, Hash, Deserialize, Serialize, AsRef, Into)]
+#[nutype(
+    validate(not_empty),
+    derive(Clone, PartialEq, Eq, Hash, Deserialize, Serialize, AsRef, Into)
+)]
 pub struct MinecraftAccessToken(String);
 
 impl Debug for MinecraftAccessToken {
