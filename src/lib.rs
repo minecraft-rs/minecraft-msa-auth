@@ -67,8 +67,8 @@ const XBOX_XSTS_AUTHORIZE: &str = "https://xsts.auth.xboxlive.com/xsts/authorize
 
 /// Represents a Minecraft access token
 #[nutype(
-validate(not_empty),
-derive(Clone, PartialEq, Eq, Hash, Deserialize, Serialize, AsRef, Into)
+    validate(not_empty),
+    derive(Clone, PartialEq, Eq, Hash, Deserialize, Serialize, AsRef, Into)
 )]
 pub struct MinecraftAccessToken(String);
 
@@ -225,9 +225,7 @@ impl MinecraftAuthorizationFlow {
             match xbox_security_token_err_resp.x_err {
                 2148916238 => Err(MinecraftAuthorizationError::AddToFamily),
                 2148916233 => Err(MinecraftAuthorizationError::NoXbox),
-                _ => {
-                    Err(MinecraftAuthorizationError::MissingClaims)
-                },
+                _ => Err(MinecraftAuthorizationError::MissingClaims),
             }
         } else {
             response.error_for_status_ref()?;
