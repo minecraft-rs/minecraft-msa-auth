@@ -218,12 +218,7 @@ impl MinecraftAuthorizationFlow {
         if response.status() == StatusCode::UNAUTHORIZED {
             let xbox_security_token_err_resp_res = response.json().await;
             if xbox_security_token_err_resp_res.is_err() {
-                return Err(MinecraftAuthorizationError::Reqwest(
-                    response
-                        .error_for_status_ref()
-                        .err()
-                        .expect("This error should always happen"),
-                ));
+                return Err(MinecraftAuthorizationError::MissingClaims);
             }
             let xbox_security_token_err_resp: XboxLiveAuthenticationResponseError =
                 xbox_security_token_err_resp_res.expect("This should succeed always");
@@ -231,12 +226,7 @@ impl MinecraftAuthorizationFlow {
                 2148916238 => Err(MinecraftAuthorizationError::AddToFamily),
                 2148916233 => Err(MinecraftAuthorizationError::NoXbox),
                 _ => {
-                    return Err(MinecraftAuthorizationError::Reqwest(
-                        response
-                            .error_for_status_ref()
-                            .err()
-                            .expect("This error should always happen"),
-                    ))
+                    Err(MinecraftAuthorizationError::MissingClaims)
                 },
             }
         } else {
