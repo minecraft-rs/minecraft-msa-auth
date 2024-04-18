@@ -56,7 +56,7 @@ use std::fmt::Debug;
 
 use getset::{CopyGetters, Getters};
 use nutype::nutype;
-use reqwest::Client;
+use reqwest::{Client, StatusCode};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use thiserror::Error;
@@ -91,6 +91,14 @@ pub enum MinecraftAuthorizationError {
     /// An error occurred while sending the request
     #[error(transparent)]
     Reqwest(#[from] reqwest::Error),
+
+    /// Account belongs to a minor who needs to be added to a microsoft family
+    #[error("Minor must be added to microsoft family")]
+    AddToFamily,
+
+    /// Account does not have xbox, user must create an xbox account to continue
+    #[error("Account does not have xbox")]
+    NoXbox,
 
     /// Claims were missing from the response
     #[error("missing claims from response")]
@@ -129,6 +137,25 @@ struct XboxLiveAuthenticationResponse {
     /// An object that contains a vec of `uhs` objects
     /// Looks like { "xui": [{"uhs": "xbl_token"}] }
     display_claims: HashMap<String, Vec<HashMap<String, String>>>,
+}
+
+/// The error response from Xbox when authenticating with a Microsoft token
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct XboxLiveAuthenticationResponseError {
+    /// Always zero
+    identity: String,
+
+    /// Error id
+    /// 2148916238 means <18 and needs to be added to microsoft family
+    /// 2148916233 means xbox account needs to be created
+    x_err: i64,
+
+    /// Message about error
+    message: String,
+
+    /// Where to go to fix the error as a user
+    redirect: String,
 }
 
 /// The flow for authenticating with a Microsoft access token and getting a
@@ -188,9 +215,23 @@ impl MinecraftAuthorizationFlow {
             }))
             .send()
             .await?;
-        response.error_for_status_ref()?;
-        let xbox_security_token_resp: XboxLiveAuthenticationResponse = response.json().await?;
-        Ok(xbox_security_token_resp)
+        if response.status() == StatusCode::UNAUTHORIZED {
+            let xbox_security_token_err_resp_res = response.json().await;
+            if xbox_security_token_err_resp_res.is_err() {
+                return Err(MinecraftAuthorizationError::MissingClaims);
+            }
+            let xbox_security_token_err_resp: XboxLiveAuthenticationResponseError =
+                xbox_security_token_err_resp_res.expect("This should succeed always");
+            match xbox_security_token_err_resp.x_err {
+                2148916238 => Err(MinecraftAuthorizationError::AddToFamily),
+                2148916233 => Err(MinecraftAuthorizationError::NoXbox),
+                _ => Err(MinecraftAuthorizationError::MissingClaims),
+            }
+        } else {
+            response.error_for_status_ref()?;
+            let xbox_security_token_resp: XboxLiveAuthenticationResponse = response.json().await?;
+            Ok(xbox_security_token_resp)
+        }
     }
 
     async fn xbox_token(
