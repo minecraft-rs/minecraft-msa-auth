@@ -15,7 +15,7 @@ nutype = { version = "0.5.0", features = ["serde"] }
 reqwest = { version = "0.12.0", default-features = false, features = ["json"] }
 serde = { version = "1.0.189", features = ["derive"] }
 serde_json = "1.0.107"
-thiserror = "1.0.50"
+thiserror = "2.0.0"
 
 [dev-dependencies]
 oauth2 = { version = "4.4.2", default-features = false, features = [
