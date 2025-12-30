@@ -18,11 +18,11 @@ serde_json = "1.0.107"
 thiserror = "2.0.0"
 
 [dev-dependencies]
+aws-lc-rs = { version = "1.0.0-rc1" }
 oauth2 = { version = "5.0.0", default-features = false, features = [
     "reqwest",
     "rustls-tls",
 ] }
-aws-lc-rs = { version = "1.0.0-rc1" }
 reqwest = { version = "0.13.1", default-features = false, features = [
     "default-tls",
     "json",
