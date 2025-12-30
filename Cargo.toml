@@ -22,8 +22,9 @@ oauth2 = { version = "5.0.0", default-features = false, features = [
     "reqwest",
     "rustls-tls",
 ] }
+aws-lc-rs = { version = "1.0.0-rc1" }
 reqwest = { version = "0.13.1", default-features = false, features = [
-    "rustls-tls",
+    "default-tls",
     "json",
 ] }
 tokio = { version = "1.33.0", features = ["full"] }
