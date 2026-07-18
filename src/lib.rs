@@ -2,9 +2,18 @@
 //! Microsoft Oauth2 token. You can integrate it with [oauth2-rs](https://github.com/ramosbugs/oauth2-rs)
 //! and build interactive authentication flows.
 //!
-//! By default the flow uses [reqwest](https://crates.io/crates/reqwest) as the HTTP client,
-//! but any other client can be plugged in by implementing the [AsyncHttpClient]
-//! trait and disabling the default `reqwest` feature.
+//! By default the flow is asynchronous and uses [reqwest](https://crates.io/crates/reqwest)
+//! as the HTTP client, but any other client can be plugged in by implementing
+//! the [HttpClient] trait and disabling the default `reqwest` feature.
+//!
+//! Enabling the `is_sync` feature turns the whole API synchronous: the
+//! [HttpClient] trait and the flow methods lose their `async`, and the
+//! `reqwest` implementation switches to [reqwest::blocking::Client]. This is
+//! aimed at small launchers that do not want an async runtime, ideally
+//! combined with the [ureq](https://crates.io/crates/ureq)-backed [UreqClient]
+//! available behind the `ureq` feature.
+//!
+//! The example below assumes the default asynchronous mode.
 //!
 //! # Example
 //!
@@ -58,8 +67,6 @@
 //! ```
 use std::collections::HashMap;
 use std::fmt::Debug;
-use std::future::Future;
-use std::pin::Pin;
 
 use getset::{CopyGetters, Getters};
 use http::header::{ACCEPT, CONTENT_TYPE};
@@ -73,25 +80,29 @@ const MINECRAFT_LOGIN_WITH_XBOX: &str = "https://api.minecraftservices.com/authe
 const XBOX_USER_AUTHENTICATE: &str = "https://user.auth.xboxlive.com/user/authenticate";
 const XBOX_XSTS_AUTHORIZE: &str = "https://xsts.auth.xboxlive.com/xsts/authorize";
 
-/// An HTTP request executed by an [AsyncHttpClient].
+/// An HTTP request executed by an [HttpClient].
 pub type HttpRequest = Request<Vec<u8>>;
 
-/// An HTTP response returned by an [AsyncHttpClient].
+/// An HTTP response returned by an [HttpClient].
 pub type HttpResponse = http::Response<Vec<u8>>;
 
-/// An asynchronous HTTP client capable of executing the requests made by
+/// An HTTP client capable of executing the requests made by
 /// [MinecraftAuthorizationFlow].
 ///
-/// An implementation for [reqwest::Client] is provided behind the `reqwest`
-/// feature, which is enabled by default.
-pub trait AsyncHttpClient {
+/// The trait is asynchronous by default and becomes synchronous when the
+/// `is_sync` feature is enabled. Implementations should be annotated with
+/// [macro@maybe_async::maybe_async] to support both modes.
+///
+/// An implementation for [reqwest::Client] ([reqwest::blocking::Client] with
+/// `is_sync`) is provided behind the `reqwest` feature, which is enabled by
+/// default.
+#[maybe_async::maybe_async]
+pub trait HttpClient {
     /// The error type returned when a request fails at the transport level.
     type Error: std::error::Error + Send + Sync + 'static;
 
     /// Executes the given request, returning the response with its full body.
-    fn call<'a>(
-        &'a self, request: HttpRequest,
-    ) -> Pin<Box<dyn Future<Output = Result<HttpResponse, Self::Error>> + Send + 'a>>;
+    async fn call(&self, request: HttpRequest) -> Result<HttpResponse, Self::Error>;
 }
 
 /// Represents a Minecraft access token
@@ -203,13 +214,14 @@ pub struct MinecraftAuthorizationFlow<C> {
 
 impl<C> MinecraftAuthorizationFlow<C> {
     /// Creates a new [MinecraftAuthorizationFlow] using the given
-    /// [AsyncHttpClient].
+    /// [HttpClient].
     pub const fn new(http_client: C) -> Self {
         Self { http_client }
     }
 }
 
-impl<C: AsyncHttpClient> MinecraftAuthorizationFlow<C> {
+#[maybe_async::maybe_async]
+impl<C: HttpClient> MinecraftAuthorizationFlow<C> {
     /// Authenticates with the Microsoft identity platform using the given
     /// Microsoft access token and returns a [MinecraftAuthenticationResponse]
     /// that contains the Minecraft access token.
@@ -326,28 +338,95 @@ impl<C: AsyncHttpClient> MinecraftAuthorizationFlow<C> {
 
 #[cfg(feature = "reqwest")]
 mod reqwest_client {
-    use std::future::Future;
-    use std::pin::Pin;
+    use super::{HttpClient, HttpRequest, HttpResponse};
 
-    use super::{AsyncHttpClient, HttpRequest, HttpResponse};
-
-    impl AsyncHttpClient for reqwest::Client {
+    #[maybe_async::async_impl]
+    impl HttpClient for reqwest::Client {
         type Error = reqwest::Error;
 
-        fn call<'a>(
-            &'a self, request: HttpRequest,
-        ) -> Pin<Box<dyn Future<Output = Result<HttpResponse, Self::Error>> + Send + 'a>> {
-            Box::pin(async move {
-                let response = self.execute(reqwest::Request::try_from(request)?).await?;
-                let status = response.status();
-                let headers = response.headers().clone();
-                let body = response.bytes().await?.to_vec();
+        async fn call(&self, request: HttpRequest) -> Result<HttpResponse, Self::Error> {
+            let response = self.execute(reqwest::Request::try_from(request)?).await?;
+            let status = response.status();
+            let headers = response.headers().clone();
+            let body = response.bytes().await?.to_vec();
 
-                let mut response = HttpResponse::new(body);
-                *response.status_mut() = status;
-                *response.headers_mut() = headers;
-                Ok(response)
-            })
+            let mut response = HttpResponse::new(body);
+            *response.status_mut() = status;
+            *response.headers_mut() = headers;
+            Ok(response)
+        }
+    }
+
+    #[maybe_async::sync_impl]
+    impl HttpClient for reqwest::blocking::Client {
+        type Error = reqwest::Error;
+
+        fn call(&self, request: HttpRequest) -> Result<HttpResponse, Self::Error> {
+            let response = self.execute(reqwest::blocking::Request::try_from(request)?)?;
+            let status = response.status();
+            let headers = response.headers().clone();
+            let body = response.bytes()?.to_vec();
+
+            let mut response = HttpResponse::new(body);
+            *response.status_mut() = status;
+            *response.headers_mut() = headers;
+            Ok(response)
+        }
+    }
+}
+
+#[cfg(feature = "ureq")]
+pub use ureq_client::UreqClient;
+
+#[cfg(feature = "ureq")]
+mod ureq_client {
+    use super::{HttpClient, HttpRequest, HttpResponse};
+
+    /// An [HttpClient] backed by [ureq](https://crates.io/crates/ureq).
+    ///
+    /// Requests are always executed synchronously, so this client is intended
+    /// for use with the `is_sync` feature, where the whole flow becomes
+    /// blocking and no async runtime is needed:
+    ///
+    /// ```ignore
+    /// // with features = ["ureq", "is_sync"]
+    /// let mc_flow = MinecraftAuthorizationFlow::new(UreqClient::default());
+    /// let mc_token = mc_flow.exchange_microsoft_token("msa token")?;
+    /// ```
+    ///
+    /// Without `is_sync` the client still works, but it will block the
+    /// executor thread while a request is in flight.
+    #[derive(Debug, Clone)]
+    pub struct UreqClient(ureq::Agent);
+
+    impl UreqClient {
+        /// Creates a [UreqClient] from an existing [ureq::Agent].
+        ///
+        /// The agent must be configured with
+        /// [http_status_as_error(false)](ureq::config::ConfigBuilder::http_status_as_error),
+        /// otherwise error responses from the Xbox services cannot be
+        /// inspected and specific errors like
+        /// [MinecraftAuthorizationError::AddToFamily](super::MinecraftAuthorizationError::AddToFamily)
+        /// cannot be reported.
+        pub fn with_agent(agent: ureq::Agent) -> Self {
+            Self(agent)
+        }
+    }
+
+    impl Default for UreqClient {
+        fn default() -> Self {
+            Self(ureq::Agent::config_builder().http_status_as_error(false).build().into())
+        }
+    }
+
+    #[maybe_async::maybe_async]
+    impl HttpClient for UreqClient {
+        type Error = ureq::Error;
+
+        async fn call(&self, request: HttpRequest) -> Result<HttpResponse, Self::Error> {
+            let response = self.0.run(request)?;
+            let (parts, mut body) = response.into_parts();
+            Ok(HttpResponse::from_parts(parts, body.read_to_vec()?))
         }
     }
 }

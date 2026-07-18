@@ -48,7 +48,24 @@ See full examples in the [examples](examples) folder.
 
 # HTTP clients
 
-By default the crate uses [reqwest](https://crates.io/crates/reqwest) to perform the authentication requests. To use a different HTTP client, disable the default `reqwest` feature and implement the `AsyncHttpClient` trait for your client of choice:
+By default the crate is asynchronous and uses [reqwest](https://crates.io/crates/reqwest) to perform the authentication requests. Two cargo features change that:
+
+- `ureq` provides `UreqClient`, a synchronous client backed by [ureq](https://crates.io/crates/ureq).
+- `is_sync` turns the whole API synchronous via [maybe-async](https://crates.io/crates/maybe-async): the flow methods lose their `async` and the reqwest implementation switches to `reqwest::blocking::Client`.
+
+For a small launcher that does not want an async runtime:
+
+```toml
+[dependencies]
+minecraft-msa-auth = { version = "0.5", default-features = false, features = ["ureq", "is_sync"] }
+```
+
+```rust
+let mc_flow = MinecraftAuthorizationFlow::new(UreqClient::default());
+let mc_token = mc_flow.exchange_microsoft_token(msa_token)?;
+```
+
+To use any other HTTP client, disable the default `reqwest` feature and implement the `HttpClient` trait for your client of choice:
 
 ```toml
 [dependencies]
