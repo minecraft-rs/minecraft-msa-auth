@@ -1,6 +1,5 @@
 use minecraft_msa_auth::MinecraftAuthorizationFlow;
 use oauth2::basic::BasicClient;
-use oauth2::reqwest::async_http_client;
 use oauth2::{
     AuthType, AuthUrl, AuthorizationCode, ClientId, CsrfToken, PkceCodeChallenge, RedirectUrl, Scope, TokenResponse,
     TokenUrl,
@@ -13,22 +12,25 @@ use tokio::net::TcpListener;
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let client_id = std::env::args().nth(1).expect("client_id as first argument");
 
-    let client = BasicClient::new(
-        ClientId::new(client_id),
-        None,
-        AuthUrl::new("https://login.microsoftonline.com/consumers/oauth2/v2.0/authorize".to_string())?,
-        Some(TokenUrl::new(
+    let client = BasicClient::new(ClientId::new(client_id))
+        .set_auth_uri(AuthUrl::new(
+            "https://login.microsoftonline.com/consumers/oauth2/v2.0/authorize".to_string(),
+        )?)
+        .set_token_uri(TokenUrl::new(
             "https://login.microsoftonline.com/consumers/oauth2/v2.0/token".to_string(),
-        )?),
-    )
-    // Microsoft requires client_id in URL rather than using Basic authentication.
-    .set_auth_type(AuthType::RequestBody)
-    // This example will be running its own server at 127.0.0.1:8114.
-    // See below for the server implementation.
-    .set_redirect_uri(
-        RedirectUrl::new("http://127.0.0.1:8114/redirect".to_string())
-            .expect("Invalid redirect URL"),
-    );
+        )?)
+        // Microsoft requires client_id in URL rather than using Basic authentication.
+        .set_auth_type(AuthType::RequestBody)
+        // This example will be running its own server at 127.0.0.1:8114.
+        // See below for the server implementation.
+        .set_redirect_uri(
+            RedirectUrl::new("http://127.0.0.1:8114/redirect".to_string())
+                .expect("Invalid redirect URL"),
+        );
+
+    // oauth2 bundles its own reqwest version, which may differ from the one
+    // minecraft-msa-auth is built against.
+    let oauth_http_client = oauth2::reqwest::Client::new();
 
     // Microsoft supports Proof Key for Code Exchange (PKCE - https://oauth.net/2/pkce/).
     // Create a PKCE code verifier and SHA-256 encode it as a code challenge.
@@ -85,7 +87,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .exchange_code(code)
             // Send the PKCE code verifier in the token request
             .set_pkce_verifier(pkce_code_verifier)
-            .request_async(async_http_client).await?;
+            .request_async(&oauth_http_client).await?;
         println!("microsoft token:\n{:?}\n", token);
 
         // Exchange the Microsoft token with a Minecraft token.

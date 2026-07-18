@@ -1,8 +1,8 @@
 use minecraft_msa_auth::MinecraftAuthorizationFlow;
 use oauth2::basic::BasicClient;
-use oauth2::devicecode::StandardDeviceAuthorizationResponse;
-use oauth2::reqwest::async_http_client;
-use oauth2::{AuthUrl, ClientId, DeviceAuthorizationUrl, Scope, TokenResponse, TokenUrl};
+use oauth2::{
+    AuthUrl, ClientId, DeviceAuthorizationUrl, Scope, StandardDeviceAuthorizationResponse, TokenResponse, TokenUrl,
+};
 use reqwest::Client;
 
 const DEVICE_CODE_URL: &str = "https://login.microsoftonline.com/consumers/oauth2/v2.0/devicecode";
@@ -12,18 +12,18 @@ const MSA_TOKEN_URL: &str = "https://login.microsoftonline.com/common/oauth2/v2.
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let client_id = std::env::args().nth(1).expect("client_id as first argument");
-    let client = BasicClient::new(
-        ClientId::new(client_id),
-        None,
-        AuthUrl::new(MSA_AUTHORIZE_URL.to_string())?,
-        Some(TokenUrl::new(MSA_TOKEN_URL.to_string())?),
-    )
-    .set_device_authorization_url(DeviceAuthorizationUrl::new(DEVICE_CODE_URL.to_string())?);
+    let client = BasicClient::new(ClientId::new(client_id))
+        .set_auth_uri(AuthUrl::new(MSA_AUTHORIZE_URL.to_string())?)
+        .set_token_uri(TokenUrl::new(MSA_TOKEN_URL.to_string())?)
+        .set_device_authorization_url(DeviceAuthorizationUrl::new(DEVICE_CODE_URL.to_string())?);
 
+    // oauth2 bundles its own reqwest version, which may differ from the one
+    // minecraft-msa-auth is built against.
+    let oauth_http_client = oauth2::reqwest::Client::new();
     let details: StandardDeviceAuthorizationResponse = client
-        .exchange_device_code()?
+        .exchange_device_code()
         .add_scope(Scope::new("XboxLive.signin offline_access".to_string()))
-        .request_async(async_http_client)
+        .request_async(&oauth_http_client)
         .await?;
 
     println!(
@@ -34,7 +34,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let token = client
         .exchange_device_access_token(&details)
-        .request_async(async_http_client, tokio::time::sleep, None)
+        .request_async(&oauth_http_client, tokio::time::sleep, None)
         .await?;
     println!("microsoft token: {:?}", token);
 
