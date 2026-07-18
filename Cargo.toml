@@ -1,6 +1,6 @@
 [package]
 name = "minecraft-msa-auth"
-version = "0.4.0"
+version = "0.5.0"
 edition = "2021"
 authors = ["Celeste Peláez <celeste@eufonia.studio>"]
 description = "A library for authenticating with Microsoft accounts to access online Minecraft services."
@@ -9,10 +9,15 @@ categories = ["authentication"]
 rust-version = "1.67.1"
 license = "MIT OR Apache-2.0"
 
+[features]
+default = ["reqwest"]
+reqwest = ["dep:reqwest"]
+
 [dependencies]
 getset = "0.1.2"
+http = "1.0.0"
 nutype = { version = "0.7.0", features = ["serde"] }
-reqwest = { version = "0.13.1", default-features = false, features = ["json"] }
+reqwest = { version = "0.13.1", default-features = false, optional = true }
 serde = { version = "1.0.189", features = ["derive"] }
 serde_json = "1.0.107"
 thiserror = "2.0.0"
