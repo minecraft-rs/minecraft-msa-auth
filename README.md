@@ -72,6 +72,10 @@ To use any other HTTP client, disable the default `reqwest` feature and implemen
 minecraft-msa-auth = { version = "0.5", default-features = false }
 ```
 
+# What's new in 0.5
+
+Version 0.5 removes the hard dependency on reqwest. `MinecraftAuthorizationFlow` is generic over an `HttpClient` trait, with implementations included for reqwest (the default), `reqwest::blocking` and ureq, and a new `is_sync` feature makes the whole API synchronous for launchers without an async runtime. Two changes break existing code: `MinecraftAuthorizationError` is now generic over the client's error type, and its `Reqwest` variant was replaced by `Http`, `HttpStatus` and `Json`. Code using the default reqwest client only needs to update its error handling. See the [changelog](CHANGELOG.md) for the full list.
+
 # License
 
 Except where noted (below and/or in individual files), all code in this repository is dual-licensed under either:
