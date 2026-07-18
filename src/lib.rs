@@ -2,14 +2,19 @@
 //! Microsoft Oauth2 token. You can integrate it with [oauth2-rs](https://github.com/ramosbugs/oauth2-rs)
 //! and build interactive authentication flows.
 //!
+//! By default the flow uses [reqwest](https://crates.io/crates/reqwest) as the HTTP client,
+//! but any other client can be plugged in by implementing the [AsyncHttpClient]
+//! trait and disabling the default `reqwest` feature.
+//!
 //! # Example
 //!
 //! ```no_run
 //! # use minecraft_msa_auth::MinecraftAuthorizationFlow;
 //! # use oauth2::basic::BasicClient;
-//! # use oauth2::devicecode::StandardDeviceAuthorizationResponse;
-//! # use oauth2::reqwest::async_http_client;
-//! # use oauth2::{AuthUrl, ClientId, DeviceAuthorizationUrl, Scope, TokenResponse, TokenUrl};
+//! # use oauth2::{
+//! #     AuthUrl, ClientId, DeviceAuthorizationUrl, Scope, StandardDeviceAuthorizationResponse, TokenResponse,
+//! #     TokenUrl,
+//! # };
 //! # use reqwest::Client;
 //! #
 //! # const DEVICE_CODE_URL: &str = "https://login.microsoftonline.com/consumers/oauth2/v2.0/devicecode";
@@ -19,18 +24,18 @@
 //! # #[tokio::main]
 //! # async fn main() -> Result<(), Box<dyn std::error::Error>> {
 //! # let client_id = std::env::args().nth(1).expect("client_id as first argument");
-//! let client = BasicClient::new(
-//!     ClientId::new(client_id),
-//!     None,
-//!     AuthUrl::new(MSA_AUTHORIZE_URL.to_string())?,
-//!     Some(TokenUrl::new(MSA_TOKEN_URL.to_string())?),
-//! )
-//! .set_device_authorization_url(DeviceAuthorizationUrl::new(DEVICE_CODE_URL.to_string())?);
+//! let client = BasicClient::new(ClientId::new(client_id))
+//!     .set_auth_uri(AuthUrl::new(MSA_AUTHORIZE_URL.to_string())?)
+//!     .set_token_uri(TokenUrl::new(MSA_TOKEN_URL.to_string())?)
+//!     .set_device_authorization_url(DeviceAuthorizationUrl::new(DEVICE_CODE_URL.to_string())?);
 //!
+//! // oauth2 bundles its own reqwest version, which may differ from the one
+//! // minecraft-msa-auth is built against.
+//! let oauth_http_client = oauth2::reqwest::Client::new();
 //! let details: StandardDeviceAuthorizationResponse = client
-//!     .exchange_device_code()?
+//!     .exchange_device_code()
 //!     .add_scope(Scope::new("XboxLive.signin offline_access".to_string()))
-//!     .request_async(async_http_client)
+//!     .request_async(&oauth_http_client)
 //!     .await?;
 //!
 //! println!(
@@ -41,7 +46,7 @@
 //!
 //! let token = client
 //!     .exchange_device_access_token(&details)
-//!     .request_async(async_http_client, tokio::time::sleep, None)
+//!     .request_async(&oauth_http_client, tokio::time::sleep, None)
 //!     .await?;
 //! println!("microsoft token: {:?}", token);
 //!
@@ -53,10 +58,13 @@
 //! ```
 use std::collections::HashMap;
 use std::fmt::Debug;
+use std::future::Future;
+use std::pin::Pin;
 
 use getset::{CopyGetters, Getters};
+use http::header::{ACCEPT, CONTENT_TYPE};
+use http::{Method, Request, StatusCode};
 use nutype::nutype;
-use reqwest::{Client, StatusCode};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use thiserror::Error;
@@ -64,6 +72,27 @@ use thiserror::Error;
 const MINECRAFT_LOGIN_WITH_XBOX: &str = "https://api.minecraftservices.com/authentication/login_with_xbox";
 const XBOX_USER_AUTHENTICATE: &str = "https://user.auth.xboxlive.com/user/authenticate";
 const XBOX_XSTS_AUTHORIZE: &str = "https://xsts.auth.xboxlive.com/xsts/authorize";
+
+/// An HTTP request executed by an [AsyncHttpClient].
+pub type HttpRequest = Request<Vec<u8>>;
+
+/// An HTTP response returned by an [AsyncHttpClient].
+pub type HttpResponse = http::Response<Vec<u8>>;
+
+/// An asynchronous HTTP client capable of executing the requests made by
+/// [MinecraftAuthorizationFlow].
+///
+/// An implementation for [reqwest::Client] is provided behind the `reqwest`
+/// feature, which is enabled by default.
+pub trait AsyncHttpClient {
+    /// The error type returned when a request fails at the transport level.
+    type Error: std::error::Error + Send + Sync + 'static;
+
+    /// Executes the given request, returning the response with its full body.
+    fn call<'a>(
+        &'a self, request: HttpRequest,
+    ) -> Pin<Box<dyn Future<Output = Result<HttpResponse, Self::Error>> + Send + 'a>>;
+}
 
 /// Represents a Minecraft access token
 #[nutype(
@@ -87,10 +116,18 @@ pub enum MinecraftTokenType {
 
 /// Represents an error that can occur when authenticating with Minecraft.
 #[derive(Error, Debug)]
-pub enum MinecraftAuthorizationError {
-    /// An error occurred while sending the request
+pub enum MinecraftAuthorizationError<E: std::error::Error> {
+    /// An error occurred while executing the HTTP request
     #[error(transparent)]
-    Reqwest(#[from] reqwest::Error),
+    Http(E),
+
+    /// The server responded with a non-success status code
+    #[error("HTTP status error: {0}")]
+    HttpStatus(StatusCode),
+
+    /// An error occurred while serializing or deserializing JSON
+    #[error(transparent)]
+    Json(#[from] serde_json::Error),
 
     /// Account belongs to a minor who needs to be added to a microsoft family
     #[error("Minor must be added to microsoft family")]
@@ -160,63 +197,67 @@ pub struct XboxLiveAuthenticationResponseError {
 
 /// The flow for authenticating with a Microsoft access token and getting a
 /// Minecraft access token.
-pub struct MinecraftAuthorizationFlow {
-    http_client: Client,
+pub struct MinecraftAuthorizationFlow<C> {
+    http_client: C,
 }
 
-impl MinecraftAuthorizationFlow {
+impl<C> MinecraftAuthorizationFlow<C> {
     /// Creates a new [MinecraftAuthorizationFlow] using the given
-    /// [Client].
-    pub const fn new(http_client: Client) -> Self {
+    /// [AsyncHttpClient].
+    pub const fn new(http_client: C) -> Self {
         Self { http_client }
     }
+}
 
+impl<C: AsyncHttpClient> MinecraftAuthorizationFlow<C> {
     /// Authenticates with the Microsoft identity platform using the given
     /// Microsoft access token and returns a [MinecraftAuthenticationResponse]
     /// that contains the Minecraft access token.
     pub async fn exchange_microsoft_token(
         &self, microsoft_access_token: impl AsRef<str>,
-    ) -> Result<MinecraftAuthenticationResponse, MinecraftAuthorizationError> {
+    ) -> Result<MinecraftAuthenticationResponse, MinecraftAuthorizationError<C::Error>> {
         let (xbox_token, user_hash) = self.xbox_token(microsoft_access_token).await?;
         let xbox_security_token = self.xbox_security_token(xbox_token).await?;
 
         let response = self
-            .http_client
-            .post(MINECRAFT_LOGIN_WITH_XBOX)
-            .json(&json!({
-                "identityToken":
-                    format!(
-                        "XBL3.0 x={user_hash};{xsts_token}",
-                        user_hash = user_hash,
-                        xsts_token = xbox_security_token.token
-                    )
-            }))
-            .send()
+            .post_json(
+                MINECRAFT_LOGIN_WITH_XBOX,
+                &json!({
+                    "identityToken":
+                        format!(
+                            "XBL3.0 x={user_hash};{xsts_token}",
+                            user_hash = user_hash,
+                            xsts_token = xbox_security_token.token
+                        )
+                }),
+            )
             .await?;
-        response.error_for_status_ref()?;
+        if !response.status().is_success() {
+            return Err(MinecraftAuthorizationError::HttpStatus(response.status()));
+        }
 
-        let response = response.json().await?;
+        let response = serde_json::from_slice(response.body())?;
         Ok(response)
     }
 
     async fn xbox_security_token(
         &self, xbox_token: String,
-    ) -> Result<XboxLiveAuthenticationResponse, MinecraftAuthorizationError> {
+    ) -> Result<XboxLiveAuthenticationResponse, MinecraftAuthorizationError<C::Error>> {
         let response = self
-            .http_client
-            .post(XBOX_XSTS_AUTHORIZE)
-            .json(&json!({
-                "Properties": {
-                    "SandboxId": "RETAIL",
-                    "UserTokens": [xbox_token]
-                },
-                "RelyingParty": "rp://api.minecraftservices.com/",
-                "TokenType": "JWT"
-            }))
-            .send()
+            .post_json(
+                XBOX_XSTS_AUTHORIZE,
+                &json!({
+                    "Properties": {
+                        "SandboxId": "RETAIL",
+                        "UserTokens": [xbox_token]
+                    },
+                    "RelyingParty": "rp://api.minecraftservices.com/",
+                    "TokenType": "JWT"
+                }),
+            )
             .await?;
         if response.status() == StatusCode::UNAUTHORIZED {
-            let xbox_security_token_err_resp_res = response.json().await;
+            let xbox_security_token_err_resp_res = serde_json::from_slice(response.body());
             if xbox_security_token_err_resp_res.is_err() {
                 return Err(MinecraftAuthorizationError::MissingClaims);
             }
@@ -227,16 +268,17 @@ impl MinecraftAuthorizationFlow {
                 2148916233 => Err(MinecraftAuthorizationError::NoXbox),
                 _ => Err(MinecraftAuthorizationError::MissingClaims),
             }
+        } else if !response.status().is_success() {
+            Err(MinecraftAuthorizationError::HttpStatus(response.status()))
         } else {
-            response.error_for_status_ref()?;
-            let xbox_security_token_resp: XboxLiveAuthenticationResponse = response.json().await?;
+            let xbox_security_token_resp: XboxLiveAuthenticationResponse = serde_json::from_slice(response.body())?;
             Ok(xbox_security_token_resp)
         }
     }
 
     async fn xbox_token(
         &self, microsoft_access_token: impl AsRef<str>,
-    ) -> Result<(String, String), MinecraftAuthorizationError> {
+    ) -> Result<(String, String), MinecraftAuthorizationError<C::Error>> {
         let xbox_authenticate_json = json!({
             "Properties": {
                 "AuthMethod": "RPS",
@@ -246,14 +288,12 @@ impl MinecraftAuthorizationFlow {
             "RelyingParty": "http://auth.xboxlive.com",
             "TokenType": "JWT"
         });
-        let response = self
-            .http_client
-            .post(XBOX_USER_AUTHENTICATE)
-            .json(&xbox_authenticate_json)
-            .send()
-            .await?;
-        response.error_for_status_ref()?;
-        let xbox_resp: XboxLiveAuthenticationResponse = response.json().await?;
+        let response = self.post_json(XBOX_USER_AUTHENTICATE, &xbox_authenticate_json).await?;
+        if !response.status().is_success() {
+            return Err(MinecraftAuthorizationError::HttpStatus(response.status()));
+        }
+
+        let xbox_resp: XboxLiveAuthenticationResponse = serde_json::from_slice(response.body())?;
         let xbox_token = xbox_resp.token;
         let user_hash = xbox_resp
             .display_claims
@@ -265,5 +305,49 @@ impl MinecraftAuthorizationFlow {
             .ok_or(MinecraftAuthorizationError::MissingClaims)?
             .to_owned();
         Ok((xbox_token, user_hash))
+    }
+
+    async fn post_json(
+        &self, url: &str, body: &serde_json::Value,
+    ) -> Result<HttpResponse, MinecraftAuthorizationError<C::Error>> {
+        let request = Request::builder()
+            .method(Method::POST)
+            .uri(url)
+            .header(CONTENT_TYPE, "application/json")
+            .header(ACCEPT, "application/json")
+            .body(serde_json::to_vec(body)?)
+            .expect("static request parts should be valid");
+        self.http_client
+            .call(request)
+            .await
+            .map_err(MinecraftAuthorizationError::Http)
+    }
+}
+
+#[cfg(feature = "reqwest")]
+mod reqwest_client {
+    use std::future::Future;
+    use std::pin::Pin;
+
+    use super::{AsyncHttpClient, HttpRequest, HttpResponse};
+
+    impl AsyncHttpClient for reqwest::Client {
+        type Error = reqwest::Error;
+
+        fn call<'a>(
+            &'a self, request: HttpRequest,
+        ) -> Pin<Box<dyn Future<Output = Result<HttpResponse, Self::Error>> + Send + 'a>> {
+            Box::pin(async move {
+                let response = self.execute(reqwest::Request::try_from(request)?).await?;
+                let status = response.status();
+                let headers = response.headers().clone();
+                let body = response.bytes().await?.to_vec();
+
+                let mut response = HttpResponse::new(body);
+                *response.status_mut() = status;
+                *response.headers_mut() = headers;
+                Ok(response)
+            })
+        }
     }
 }

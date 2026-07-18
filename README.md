@@ -15,18 +15,16 @@ const DEVICE_CODE_URL: &str = "https://login.microsoftonline.com/consumers/oauth
 const MSA_AUTHORIZE_URL: &str = "https://login.microsoftonline.com/consumers/oauth2/v2.0/authorize";
 const MSA_TOKEN_URL: &str = "https://login.microsoftonline.com/common/oauth2/v2.0/token";
 
-let client = BasicClient::new(
-    ClientId::new(client_id),
-    None,
-    AuthUrl::new(MSA_AUTHORIZE_URL.to_string())?,
-    Some(TokenUrl::new(MSA_TOKEN_URL.to_string())?),
-)
-.set_device_authorization_url(DeviceAuthorizationUrl::new(DEVICE_CODE_URL.to_string())?);
+let client = BasicClient::new(ClientId::new(client_id))
+    .set_auth_uri(AuthUrl::new(MSA_AUTHORIZE_URL.to_string())?)
+    .set_token_uri(TokenUrl::new(MSA_TOKEN_URL.to_string())?)
+    .set_device_authorization_url(DeviceAuthorizationUrl::new(DEVICE_CODE_URL.to_string())?);
 
+let oauth_http_client = oauth2::reqwest::Client::new();
 let details: StandardDeviceAuthorizationResponse = client
-    .exchange_device_code()?
+    .exchange_device_code()
     .add_scope(Scope::new("XboxLive.signin offline_access".to_string()))
-    .request_async(async_http_client)
+    .request_async(&oauth_http_client)
     .await?;
 
 println!(
@@ -37,7 +35,7 @@ println!(
 
 let token = client
     .exchange_device_access_token(&details)
-    .request_async(async_http_client, tokio::time::sleep, None)
+    .request_async(&oauth_http_client, tokio::time::sleep, None)
     .await?;
 println!("microsoft token: {:?}", token);
 
@@ -47,6 +45,15 @@ println!("minecraft token: {:?}", mc_token);
 ```
 
 See full examples in the [examples](examples) folder.
+
+# HTTP clients
+
+By default the crate uses [reqwest](https://crates.io/crates/reqwest) to perform the authentication requests. To use a different HTTP client, disable the default `reqwest` feature and implement the `AsyncHttpClient` trait for your client of choice:
+
+```toml
+[dependencies]
+minecraft-msa-auth = { version = "0.5", default-features = false }
+```
 
 # License
 
