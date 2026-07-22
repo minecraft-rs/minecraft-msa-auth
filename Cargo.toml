@@ -1,6 +1,6 @@
 [package]
 name = "minecraft-msa-auth"
-version = "0.4.0"
+version = "0.5.0"
 edition = "2021"
 authors = ["Celeste Peláez <celeste@eufonia.studio>"]
 description = "A library for authenticating with Microsoft accounts to access online Minecraft services."
@@ -9,18 +9,29 @@ categories = ["authentication"]
 rust-version = "1.67.1"
 license = "MIT OR Apache-2.0"
 
+[features]
+default = ["reqwest"]
+is_sync = ["maybe-async/is_sync", "reqwest?/blocking"]
+reqwest = ["dep:reqwest"]
+ureq = ["dep:ureq"]
+
 [dependencies]
+async-trait = "0.1.74"
 getset = "0.1.2"
+http = "1.0.0"
+maybe-async = "0.2.10"
 nutype = { version = "0.7.0", features = ["serde"] }
-reqwest = { version = "0.13.1", default-features = false, features = ["json"] }
+reqwest = { version = "0.13.1", default-features = false, optional = true }
 serde = { version = "1.0.189", features = ["derive"] }
 serde_json = "1.0.107"
 thiserror = "2.0.0"
+ureq = { version = "3.0.0", optional = true }
 
 [dev-dependencies]
 aws-lc-rs = { version = "1.0.0-rc1" }
 oauth2 = { version = "5.0.0", default-features = false, features = [
     "reqwest",
+    "reqwest-blocking",
     "rustls-tls",
 ] }
 reqwest = { version = "0.13.1", default-features = false, features = [
@@ -28,3 +39,7 @@ reqwest = { version = "0.13.1", default-features = false, features = [
     "json",
 ] }
 tokio = { version = "1.33.0", features = ["full"] }
+
+[[example]]
+name = "sync_device_flow"
+required-features = ["ureq", "is_sync"]

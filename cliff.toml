@@ -1,0 +1,72 @@
+# Draft the pending section as `## [Unreleased]` (edit prose + version afterwards):
+#   git cliff --unreleased --prepend CHANGELOG.md
+#
+# Regenerate the whole file from tagged releases (each dated from its tag):
+#   git cliff --output CHANGELOG.md
+#
+# Note: a tagged release renders `## [X.Y.Z] - YYYY-MM-DD`; an untagged draft
+# renders `## [Unreleased]`. To pre-name the pending version as
+# `## [0.5.0] - Unreleased` (this project's style), edit that one line by hand.
+#
+# git-cliff produces a scaffold from commit subjects; the curated "why/how"
+# wording in this project's changelog is still added by hand after generating.
+
+[changelog]
+# The static intro kept verbatim from the current CHANGELOG.md.
+header = """
+# Changelog
+
+All notable changes to this project are documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+"""
+
+# One release block: `## [version] - date` (or `- Unreleased`) followed by
+# `### Added` / `### Changed` / ... sections of bullet points.
+body = """
+{% if version -%}
+## [{{ version | trim_start_matches(pat="v") }}] - {{ timestamp | date(format="%Y-%m-%d") }}
+{% else -%}
+## [Unreleased]
+{% endif %}
+{% for group, commits in commits | group_by(attribute="group") %}
+### {{ group | upper_first }}
+{% for commit in commits %}
+- {% if commit.breaking %}Breaking: {% endif %}{{ commit.message | upper_first | trim }}
+{%- endfor %}
+{% endfor %}"""
+
+trim = true
+
+[git]
+conventional_commits = true
+# Repair a historical v0.3.0 commit
+commit_preprocessors = [
+    { pattern = "\\nrefactor: make `token_type` use `MinecraftTokenType`", replace = "" },
+]
+# Drop merge commits and anything not following the convention.
+filter_unconventional = true
+protect_breaking_commits = true
+# Map conventional commit types onto Keep a Changelog sections. Breaking changes
+# get a "Breaking: " prefix from the template above rather than a separate group,
+# matching the current changelog. First matching parser wins.
+commit_parsers = [
+    { message = "^feat", group = "Added" },
+    { message = "^fix", group = "Fixed" },
+    { message = "^perf", group = "Changed" },
+    { message = "^refactor", group = "Changed" },
+    { message = "^deprecat", group = "Deprecated" },
+    # Dependency bumps are user-facing and belong in the changelog.
+    { message = "^(chore|build)\\(deps\\)", group = "Changed" },
+    # Everything else (docs, tests, ci, styling, housekeeping) is omitted.
+    { message = "^chore", skip = true },
+    { message = "^docs", skip = true },
+    { message = "^test", skip = true },
+    { message = "^ci", skip = true },
+    { message = "^build", skip = true },
+    { message = "^style", skip = true },
+    { message = ".*", skip = true },
+]
+# Only bare or v-prefixed semver tags mark releases.
+tag_pattern = "v?[0-9]+\\.[0-9]+\\.[0-9]+"
+sort_commits = "oldest"
