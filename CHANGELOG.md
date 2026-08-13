@@ -18,8 +18,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Breaking: `MinecraftAuthorizationFlow` is generic over its HTTP client. With default features, `MinecraftAuthorizationFlow::new(reqwest::Client::new())` works as before.
 - Breaking: `MinecraftAuthorizationError` is generic over the client's error type. The `Reqwest` variant was replaced by `Http` (transport errors), `HttpStatus` (non-success responses) and `Json` (serialization errors).
 - reqwest is now an optional dependency behind the default `reqwest` feature, and was updated to 0.13.
-- Updated thiserror to 2.0 and nutype to 0.6.
+- Updated thiserror to 2.0 and nutype to 0.7.
 - Examples and documentation use the oauth2 5.0 API.
+
+### Fixed
+
+- Unknown Xbox Live error codes are preserved in the `XboxLive` error variant instead of being reported as missing claims.
+- Asynchronous examples are gated correctly when the `is_sync` feature is enabled.
 
 ## [0.4.0] - 2024-04-21
 
