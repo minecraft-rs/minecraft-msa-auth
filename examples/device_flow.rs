@@ -1,14 +1,22 @@
+#[cfg(not(feature = "is_sync"))]
 use minecraft_msa_auth::MinecraftAuthorizationFlow;
+#[cfg(not(feature = "is_sync"))]
 use oauth2::basic::BasicClient;
+#[cfg(not(feature = "is_sync"))]
 use oauth2::{
     AuthUrl, ClientId, DeviceAuthorizationUrl, Scope, StandardDeviceAuthorizationResponse, TokenResponse, TokenUrl,
 };
+#[cfg(not(feature = "is_sync"))]
 use reqwest::Client;
 
+#[cfg(not(feature = "is_sync"))]
 const DEVICE_CODE_URL: &str = "https://login.microsoftonline.com/consumers/oauth2/v2.0/devicecode";
+#[cfg(not(feature = "is_sync"))]
 const MSA_AUTHORIZE_URL: &str = "https://login.microsoftonline.com/consumers/oauth2/v2.0/authorize";
+#[cfg(not(feature = "is_sync"))]
 const MSA_TOKEN_URL: &str = "https://login.microsoftonline.com/common/oauth2/v2.0/token";
 
+#[cfg(not(feature = "is_sync"))]
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let client_id = std::env::args().nth(1).expect("client_id as first argument");
@@ -42,4 +50,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mc_token = mc_flow.exchange_microsoft_token(token.access_token().secret()).await?;
     println!("minecraft token: {:?}", mc_token);
     Ok(())
+}
+
+#[cfg(feature = "is_sync")]
+fn main() {
+    eprintln!("this example requires the asynchronous API; disable the `is_sync` feature");
 }

@@ -1,13 +1,20 @@
+#[cfg(not(feature = "is_sync"))]
 use minecraft_msa_auth::MinecraftAuthorizationFlow;
+#[cfg(not(feature = "is_sync"))]
 use oauth2::basic::BasicClient;
+#[cfg(not(feature = "is_sync"))]
 use oauth2::{
     AuthType, AuthUrl, AuthorizationCode, ClientId, CsrfToken, PkceCodeChallenge, RedirectUrl, Scope, TokenResponse,
     TokenUrl,
 };
+#[cfg(not(feature = "is_sync"))]
 use reqwest::{Client, Url};
+#[cfg(not(feature = "is_sync"))]
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+#[cfg(not(feature = "is_sync"))]
 use tokio::net::TcpListener;
 
+#[cfg(not(feature = "is_sync"))]
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let client_id = std::env::args().nth(1).expect("client_id as first argument");
@@ -99,4 +106,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         break;
     }
     Ok(())
+}
+
+#[cfg(feature = "is_sync")]
+fn main() {
+    eprintln!("this example requires the asynchronous API; disable the `is_sync` feature");
 }

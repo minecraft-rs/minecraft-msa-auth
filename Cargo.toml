@@ -41,5 +41,13 @@ reqwest = { version = "0.13.1", default-features = false, features = [
 tokio = { version = "1.33.0", features = ["full"] }
 
 [[example]]
+name = "auth_code_flow"
+required-features = ["reqwest"]
+
+[[example]]
+name = "device_flow"
+required-features = ["reqwest"]
+
+[[example]]
 name = "sync_device_flow"
 required-features = ["ureq", "is_sync"]
