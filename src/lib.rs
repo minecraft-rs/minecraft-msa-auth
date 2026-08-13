@@ -18,6 +18,8 @@
 //! # Example
 //!
 //! ```no_run
+//! # #[cfg(not(feature = "is_sync"))]
+//! # {
 //! # use minecraft_msa_auth::MinecraftAuthorizationFlow;
 //! # use oauth2::basic::BasicClient;
 //! # use oauth2::{
@@ -64,6 +66,7 @@
 //! println!("minecraft token: {:?}", mc_token);
 //! # Ok(())
 //! # }
+//! # }
 //! ```
 use std::collections::HashMap;
 use std::fmt::Debug;
@@ -73,7 +76,6 @@ use http::header::{ACCEPT, CONTENT_TYPE};
 use http::{Method, Request, StatusCode};
 use nutype::nutype;
 use serde::{Deserialize, Serialize};
-use serde_json::json;
 use thiserror::Error;
 
 const MINECRAFT_LOGIN_WITH_XBOX: &str = "https://api.minecraftservices.com/authentication/login_with_xbox";
@@ -151,6 +153,10 @@ pub enum MinecraftAuthorizationError<E: std::error::Error> {
     /// Claims were missing from the response
     #[error("missing claims from response")]
     MissingClaims,
+
+    /// Xbox Live rejected authentication with an unrecognized error code
+    #[error("Xbox Live authentication failed with error code {code}")]
+    XboxLive { code: u32 },
 }
 
 /// The response from Minecraft when attempting to authenticate with an xbox
@@ -187,23 +193,30 @@ struct XboxLiveAuthenticationResponse {
     display_claims: HashMap<String, Vec<HashMap<String, String>>>,
 }
 
-/// The error response from Xbox when authenticating with a Microsoft token
-#[derive(Serialize, Deserialize)]
+/// The error response from Xbox when authenticating with a Microsoft token.
+#[derive(Debug, Deserialize)]
 #[serde(rename_all = "PascalCase")]
-pub struct XboxLiveAuthenticationResponseError {
-    /// Always zero
-    identity: String,
+struct XboxLiveErrorResponse {
+    #[serde(rename = "XErr")]
+    code: XboxLiveErrorCode,
+}
 
-    /// Error id
-    /// 2148916238 means <18 and needs to be added to microsoft family
-    /// 2148916233 means xbox account needs to be created
-    x_err: i64,
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(from = "u32")]
+enum XboxLiveErrorCode {
+    XboxAccountRequired,
+    FamilyMembershipRequired,
+    Unknown(u32),
+}
 
-    /// Message about error
-    message: String,
-
-    /// Where to go to fix the error as a user
-    redirect: String,
+impl From<u32> for XboxLiveErrorCode {
+    fn from(code: u32) -> Self {
+        match code {
+            2_148_916_233 => Self::XboxAccountRequired,
+            2_148_916_238 => Self::FamilyMembershipRequired,
+            code => Self::Unknown(code),
+        }
+    }
 }
 
 /// The flow for authenticating with a Microsoft access token and getting a
@@ -228,21 +241,23 @@ impl<C: HttpClient> MinecraftAuthorizationFlow<C> {
     pub async fn exchange_microsoft_token(
         &self, microsoft_access_token: impl AsRef<str>,
     ) -> Result<MinecraftAuthenticationResponse, MinecraftAuthorizationError<C::Error>> {
+        #[derive(Serialize)]
+        struct MinecraftAuthenticationRequest {
+            #[serde(rename = "identityToken")]
+            identity_token: String,
+        }
+
         let (xbox_token, user_hash) = self.xbox_token(microsoft_access_token).await?;
         let xbox_security_token = self.xbox_security_token(xbox_token).await?;
 
         let response = self
-            .post_json(
-                MINECRAFT_LOGIN_WITH_XBOX,
-                &json!({
-                    "identityToken":
-                        format!(
-                            "XBL3.0 x={user_hash};{xsts_token}",
-                            user_hash = user_hash,
-                            xsts_token = xbox_security_token.token
-                        )
-                }),
-            )
+            .post_json(MINECRAFT_LOGIN_WITH_XBOX, &MinecraftAuthenticationRequest {
+                identity_token: format!(
+                    "XBL3.0 x={user_hash};{xsts_token}",
+                    user_hash = user_hash,
+                    xsts_token = xbox_security_token.token
+                ),
+            })
             .await?;
         if !response.status().is_success() {
             return Err(MinecraftAuthorizationError::HttpStatus(response.status()));
@@ -255,31 +270,41 @@ impl<C: HttpClient> MinecraftAuthorizationFlow<C> {
     async fn xbox_security_token(
         &self, xbox_token: String,
     ) -> Result<XboxLiveAuthenticationResponse, MinecraftAuthorizationError<C::Error>> {
+        #[derive(Serialize)]
+        struct Properties {
+            #[serde(rename = "SandboxId")]
+            sandbox_id: &'static str,
+            #[serde(rename = "UserTokens")]
+            user_tokens: [String; 1],
+        }
+
+        #[derive(Serialize)]
+        struct XboxSecurityTokenRequest {
+            #[serde(rename = "Properties")]
+            properties: Properties,
+            #[serde(rename = "RelyingParty")]
+            relying_party: &'static str,
+            #[serde(rename = "TokenType")]
+            token_type: &'static str,
+        }
+
         let response = self
-            .post_json(
-                XBOX_XSTS_AUTHORIZE,
-                &json!({
-                    "Properties": {
-                        "SandboxId": "RETAIL",
-                        "UserTokens": [xbox_token]
-                    },
-                    "RelyingParty": "rp://api.minecraftservices.com/",
-                    "TokenType": "JWT"
-                }),
-            )
+            .post_json(XBOX_XSTS_AUTHORIZE, &XboxSecurityTokenRequest {
+                properties: Properties {
+                    sandbox_id: "RETAIL",
+                    user_tokens: [xbox_token],
+                },
+                relying_party: "rp://api.minecraftservices.com/",
+                token_type: "JWT",
+            })
             .await?;
         if response.status() == StatusCode::UNAUTHORIZED {
-            let xbox_security_token_err_resp_res = serde_json::from_slice(response.body());
-            if xbox_security_token_err_resp_res.is_err() {
-                return Err(MinecraftAuthorizationError::MissingClaims);
-            }
-            let xbox_security_token_err_resp: XboxLiveAuthenticationResponseError =
-                xbox_security_token_err_resp_res.expect("This should succeed always");
-            match xbox_security_token_err_resp.x_err {
-                2148916238 => Err(MinecraftAuthorizationError::AddToFamily),
-                2148916233 => Err(MinecraftAuthorizationError::NoXbox),
-                _ => Err(MinecraftAuthorizationError::MissingClaims),
-            }
+            let error: XboxLiveErrorResponse = serde_json::from_slice(response.body())?;
+            Err(match error.code {
+                XboxLiveErrorCode::XboxAccountRequired => MinecraftAuthorizationError::NoXbox,
+                XboxLiveErrorCode::FamilyMembershipRequired => MinecraftAuthorizationError::AddToFamily,
+                XboxLiveErrorCode::Unknown(code) => MinecraftAuthorizationError::XboxLive { code },
+            })
         } else if !response.status().is_success() {
             Err(MinecraftAuthorizationError::HttpStatus(response.status()))
         } else {
@@ -291,16 +316,37 @@ impl<C: HttpClient> MinecraftAuthorizationFlow<C> {
     async fn xbox_token(
         &self, microsoft_access_token: impl AsRef<str>,
     ) -> Result<(String, String), MinecraftAuthorizationError<C::Error>> {
-        let xbox_authenticate_json = json!({
-            "Properties": {
-                "AuthMethod": "RPS",
-                "SiteName": "user.auth.xboxlive.com",
-                "RpsTicket": &format!("d={}", microsoft_access_token.as_ref())
-            },
-            "RelyingParty": "http://auth.xboxlive.com",
-            "TokenType": "JWT"
-        });
-        let response = self.post_json(XBOX_USER_AUTHENTICATE, &xbox_authenticate_json).await?;
+        #[derive(Serialize)]
+        struct Properties {
+            #[serde(rename = "AuthMethod")]
+            auth_method: &'static str,
+            #[serde(rename = "SiteName")]
+            site_name: &'static str,
+            #[serde(rename = "RpsTicket")]
+            rps_ticket: String,
+        }
+
+        #[derive(Serialize)]
+        struct XboxTokenRequest {
+            #[serde(rename = "Properties")]
+            properties: Properties,
+            #[serde(rename = "RelyingParty")]
+            relying_party: &'static str,
+            #[serde(rename = "TokenType")]
+            token_type: &'static str,
+        }
+
+        let response = self
+            .post_json(XBOX_USER_AUTHENTICATE, &XboxTokenRequest {
+                properties: Properties {
+                    auth_method: "RPS",
+                    site_name: "user.auth.xboxlive.com",
+                    rps_ticket: format!("d={}", microsoft_access_token.as_ref()),
+                },
+                relying_party: "http://auth.xboxlive.com",
+                token_type: "JWT",
+            })
+            .await?;
         if !response.status().is_success() {
             return Err(MinecraftAuthorizationError::HttpStatus(response.status()));
         }
@@ -319,8 +365,8 @@ impl<C: HttpClient> MinecraftAuthorizationFlow<C> {
         Ok((xbox_token, user_hash))
     }
 
-    async fn post_json(
-        &self, url: &str, body: &serde_json::Value,
+    async fn post_json<T: Serialize>(
+        &self, url: &str, body: &T,
     ) -> Result<HttpResponse, MinecraftAuthorizationError<C::Error>> {
         let request = Request::builder()
             .method(Method::POST)
@@ -428,5 +474,35 @@ mod ureq_client {
             let (parts, mut body) = response.into_parts();
             Ok(HttpResponse::from_parts(parts, body.read_to_vec()?))
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{XboxLiveErrorCode, XboxLiveErrorResponse};
+
+    #[test]
+    fn deserializes_known_xbox_live_error_codes() {
+        let no_xbox: XboxLiveErrorResponse =
+            serde_json::from_str(r#"{"Identity":"0","XErr":2148916233,"Message":"","Redirect":""}"#).unwrap();
+        let add_to_family: XboxLiveErrorResponse =
+            serde_json::from_str(r#"{"Identity":"0","XErr":2148916238,"Message":"","Redirect":""}"#).unwrap();
+
+        assert_eq!(no_xbox.code, XboxLiveErrorCode::XboxAccountRequired);
+        assert_eq!(add_to_family.code, XboxLiveErrorCode::FamilyMembershipRequired);
+    }
+
+    #[test]
+    fn preserves_unknown_xbox_live_error_codes() {
+        let response: XboxLiveErrorResponse = serde_json::from_str(r#"{"XErr":42}"#).unwrap();
+
+        assert_eq!(response.code, XboxLiveErrorCode::Unknown(42));
+    }
+
+    #[test]
+    fn rejects_malformed_xbox_live_error_responses() {
+        let response = serde_json::from_str::<XboxLiveErrorResponse>(r#"{"XErr":"invalid"}"#);
+
+        assert!(response.is_err());
     }
 }
