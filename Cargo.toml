@@ -17,7 +17,7 @@ ureq = ["dep:ureq"]
 
 [dependencies]
 async-trait = "0.1.74"
-getset = "0.1.2"
+getset = "0.1.7"
 http = "1.0.0"
 maybe-async = "0.2.10"
 nutype = { version = "0.8.0", features = ["serde"] }

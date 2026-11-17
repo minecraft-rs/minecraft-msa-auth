@@ -25,8 +25,7 @@ mod async_impl {
             // This example will be running its own server at 127.0.0.1:8114.
             // See below for the server implementation.
             .set_redirect_uri(
-                RedirectUrl::new("http://127.0.0.1:8114/redirect".to_string())
-                    .expect("Invalid redirect URL"),
+                RedirectUrl::new("http://127.0.0.1:8114/redirect".to_string()).expect("Invalid redirect URL"),
             );
 
         // oauth2 bundles its own reqwest version, which may differ from the one
@@ -34,7 +33,8 @@ mod async_impl {
         let oauth_http_client = oauth2::reqwest::Client::new();
 
         // Microsoft supports Proof Key for Code Exchange (PKCE - https://oauth.net/2/pkce/).
-        // Create a PKCE code verifier and SHA-256 encode it as a code challenge.
+        // Create a PKCE code verifier and SHA-256 encode it as a code
+        // challenge.
         let (pkce_code_challenge, pkce_code_verifier) = PkceCodeChallenge::new_random_sha256();
 
         // Generate the authorization URL to which we'll redirect the user.
@@ -88,7 +88,8 @@ mod async_impl {
                 .exchange_code(code)
                 // Send the PKCE code verifier in the token request
                 .set_pkce_verifier(pkce_code_verifier)
-                .request_async(&oauth_http_client).await?;
+                .request_async(&oauth_http_client)
+                .await?;
             println!("microsoft token:\n{:?}\n", token);
 
             // Exchange the Microsoft token with a Minecraft token.
